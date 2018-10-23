@@ -34,6 +34,7 @@ public:
     ArrayBuffer::Allocator* allocator;
     StartupData* startup_data;
     bool interrupted;
+    bool mem_notifs;
     pid_t pid;
     VALUE mutex;
 
@@ -51,7 +52,7 @@ public:
 
 
     IsolateInfo() : isolate(nullptr), allocator(nullptr), startup_data(nullptr),
-        interrupted(false), pid(getpid()), refs_count(0) {
+        interrupted(false), mem_notifs(false), pid(getpid()), refs_count(0) {
         VALUE cMutex = rb_const_get(rb_cThread, rb_intern("Mutex"));
         mutex = rb_class_new_instance(0, nullptr, cMutex);
     }
@@ -64,6 +65,9 @@ public:
     void init(SnapshotInfo* snapshot_info = nullptr);
 
     void mark() {
+        if (mem_notifs) {
+            isolate->LowMemoryNotification();
+        }
         rb_gc_mark(mutex);
     }
 
@@ -1376,6 +1380,31 @@ static VALUE rb_context_create_isolate_value(VALUE self) {
     return Data_Wrap_Struct(rb_cIsolate, NULL, &deallocate_isolate, isolate_info);
 }
 
+/* version going through context to avoid allow using the setting without
+ * bringing the isolate ruby object into existence */
+static VALUE rb_context_set_low_mem_notifications(VALUE self, VALUE val) {
+    ContextInfo* context_info;
+    Data_Get_Struct(self, ContextInfo, context_info);
+    IsolateInfo* isolate_info = context_info->isolate_info;
+
+    if (!isolate_info) {
+        return Qnil;
+    }
+
+    isolate_info->mem_notifs = RTEST(val);
+
+    return RTEST(val);
+}
+
+static VALUE rb_isolate_set_low_mem_notifications(VALUE self, VALUE val) {
+    IsolateInfo* isolate_info;
+    Data_Get_Struct(self, IsolateInfo, isolate_info);
+
+    isolate_info->mem_notifs = RTEST(val);
+
+    return RTEST(val);
+}
+
 extern "C" {
 
     void Init_sq_mini_racer_extension ( void )
@@ -1406,6 +1435,7 @@ extern "C" {
 	rb_define_method(rb_cContext, "stop", (VALUE(*)(...))&rb_context_stop, 0);
 	rb_define_method(rb_cContext, "dispose_unsafe", (VALUE(*)(...))&rb_context_dispose, 0);
 	rb_define_method(rb_cContext, "heap_stats", (VALUE(*)(...))&rb_heap_stats, 0);
+	rb_define_method(rb_cContext, "low_mem_notifications=", (VALUE(*)(...))&rb_context_set_low_mem_notifications, 1);
 	rb_define_private_method(rb_cContext, "create_isolate_value",(VALUE(*)(...))&rb_context_create_isolate_value, 0);
 	rb_define_private_method(rb_cContext, "eval_unsafe",(VALUE(*)(...))&rb_context_eval_unsafe, 2);
 	rb_define_private_method(rb_cContext, "call_unsafe", (VALUE(*)(...))&rb_context_call_unsafe, -1);
@@ -1425,6 +1455,7 @@ extern "C" {
 	rb_define_private_method(rb_cSnapshot, "load", (VALUE(*)(...))&rb_snapshot_load, 1);
 
 	rb_define_method(rb_cIsolate, "idle_notification", (VALUE(*)(...))&rb_isolate_idle_notification, 1);
+	rb_define_method(rb_cIsolate, "low_mem_notifications=", (VALUE(*)(...))&rb_isolate_set_low_mem_notifications, 1);
 	rb_define_private_method(rb_cIsolate, "init_with_snapshot",(VALUE(*)(...))&rb_isolate_init_with_snapshot, 1);
 
 	rb_define_singleton_method(rb_cPlatform, "set_flag_as_str!", (VALUE(*)(...))&rb_platform_set_flag_as_str, 1);
