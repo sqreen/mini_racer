@@ -1,6 +1,6 @@
 require 'securerandom'
 require 'date'
-require 'test_helper'
+require_relative 'test_helper'
 
 module Sqreen
 class MiniRacerTest < Minitest::Test
@@ -616,6 +616,21 @@ raise FooError, "I like foos"
       context.eval("var a = [{},{},{}]; while(true) { a = marsh(a[0],a[1],a[2]); }")
     end
 
+  end
+
+  def test_low_memory_notification
+    context = MiniRacer::Context.new
+    context.eval "var a = []; for (var i = 0; i < 10000; i++) { a[i] = i * 2 }; a = undefined"
+    used_heap_size = context.heap_stats[:used_heap_size]
+
+    GC.start
+
+    assert_equal used_heap_size, context.heap_stats[:used_heap_size]
+
+    context.low_mem_notifications = true
+    GC.start
+
+    assert used_heap_size > context.heap_stats[:used_heap_size]
   end
 
   class TestPlatform < MiniRacer::Platform
