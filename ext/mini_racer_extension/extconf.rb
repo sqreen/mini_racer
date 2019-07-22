@@ -122,7 +122,8 @@ EOS
 end
 
 LIBV8_VERSION = '7.3.492.27.1'
-libv8_rb = Dir.glob('**/libv8.rb').first
+libv8_glob = "**/*-#{LIBV8_VERSION}-*/**/libv8.rb"
+libv8_rb = Dir.glob(libv8_glob).first
 FileUtils.mkdir_p('gemdir')
 unless libv8_rb
   gem_name = libv8_gem_name
@@ -138,7 +139,7 @@ sure that you have internet access and that the `gem` binary is available.
 EOS
   end
 
-  libv8_rb = Dir.glob('**/libv8.rb').first
+  libv8_rb = Dir.glob(libv8_glob).first
   unless libv8_rb
     warn <<EOS
 
