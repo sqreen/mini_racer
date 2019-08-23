@@ -85,31 +85,41 @@ def libv8_version
 end
 
 def find_libv8
-  libv8_glob = "**/*-#{libv8_version}-*/**/libv8.rb"
-  libv8_rb = Dir.glob(libv8_glob).first
-  FileUtils.mkdir_p('gemdir')
+  libv8_path = "libv8*-#{libv8_version}-*/lib/libv8.rb"
+
+  # find matching version in local gems
+  libv8_rb = Gem.path.map { |p| p + '/gems/' + libv8_path }.map { |p| Dir.glob(p) }.flatten.first
+
+  # find matching version in build dir
   unless libv8_rb
+    libv8_glob = "**/#{libv8_path}"
+    libv8_rb = Dir.glob(libv8_glob).first
+  end
+
+  # download matching version in build dir
+  unless libv8_rb
+    FileUtils.mkdir_p('gemdir')
     gem_name = libv8_gem_name
     cmd = "#{fixup_libtinfo} #{force_platform_gem} install --version '= #{libv8_version}' --install-dir gemdir #{gem_name}"
     puts "Will try downloading #{gem_name} gem: #{cmd}"
     `#{cmd}`
     unless $?.success?
-      warn <<EOS
+      warn <<-WARN
 
-WARNING: Could not download a private copy of the libv8 gem. Please make
-sure that you have internet access and that the `gem` binary is available.
+      WARNING: Could not download a private copy of the libv8 gem. Please make
+      sure that you have internet access and that the `gem` binary is available.
 
-EOS
+      WARN
     end
 
     libv8_rb = Dir.glob(libv8_glob).first
     unless libv8_rb
-      warn <<EOS
+      warn <<-WARN
 
-WARNING: Could not find libv8 after the local copy of libv8 having supposedly
-been installed.
+      WARNING: Could not find libv8 after the local copy of libv8 having supposedly
+      been installed.
 
-EOS
+      WARN
     end
   end
 
