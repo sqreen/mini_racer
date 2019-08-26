@@ -1,24 +1,191 @@
 require 'mkmf'
+
 require 'fileutils'
+require 'net/http'
+require 'json'
+require 'rubygems'
+require 'rubygems/package'
+
+IS_SOLARIS = RUBY_PLATFORM =~ /solaris/
+IS_LINUX_MUSL = RUBY_PLATFORM =~ /linux-musl/
+
+def cppflags_clear_std!
+  $CPPFLAGS.gsub! /-std=[^\s]+/, ''
+end
+
+def cppflags_add_frame_pointer!
+  $CPPFLAGS += " -fno-omit-frame-pointer"
+end
+
+def cppflags_add_cpu_extension!
+  if enable_config('avx2')
+    $CPPFLAGS += " -mavx2"
+  else
+    $CPPFLAGS += " -mssse3"
+  end
+end
+
+def libv8_gem_name
+  return "libv8-solaris" if IS_SOLARIS
+  return "libv8-alpine" if IS_LINUX_MUSL
+
+  'libv8'
+end
+
+def libv8_version
+  '7.3.492.27.1'
+end
+
+def libv8_basename
+  "#{libv8_gem_name}-#{libv8_version}-#{ruby_platform}"
+end
+
+def libv8_gemspec
+  "#{libv8_basename}.gemspec"
+end
+
+def libv8_local_path
+  puts "looking for #{libv8_gemspec} in installed gems"
+  candidates = Gem.path.map { |p| File.join(p, 'specifications', libv8_gemspec) }
+  found = candidates.select { |f| File.exist?(f) }.first
+
+  unless found
+    puts "#{libv8_gemspec} not found in installed gems"
+    return
+  end
+
+  puts "found in installed specs: #{found}"
+
+  dir = File.expand_path(File.join(found, '..', '..', 'gems', libv8_basename))
+
+  unless Dir.exist?(dir)
+    puts "not found in installed gems: #{dir}"
+    return
+  end
+
+  puts "found in installed gems: #{dir}"
+
+  dir
+end
+
+def vendor_path
+  File.join(Dir.pwd, 'vendor')
+end
+
+def libv8_vendor_path
+  puts "looking for #{libv8_basename} in #{vendor_path}"
+  path = Dir.glob("#{vendor_path}/#{libv8_basename}").first
+
+  unless path
+    puts "#{libv8_basename} not found in #{vendor_path}"
+    return
+  end
+
+  puts "looking for #{libv8_basename}/lib/libv8.rb in #{vendor_path}"
+  unless Dir.glob(File.join(vendor_path, libv8_basename, 'lib', 'libv8.rb')).first
+    puts "#{libv8_basename}/lib/libv8.rb not found in #{vendor_path}"
+    return
+  end
+
+  path
+end
+
+def parse_platform(str)
+  Gem::Platform.new(str).tap { |p| p.instance_eval { @os = 'linux-musl' } if str =~ /musl/ }
+end
+
+def ruby_platform
+  parse_platform(RUBY_PLATFORM)
+end
+
+def http_get(uri)
+  Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https') do |http|
+    res = http.get(uri.path)
+
+    abort("HTTP error #{res.code}: #{uri}") unless res.code == '200'
+
+    return res.body
+  end
+end
+
+def libv8_remote_search
+  body = http_get(URI("https://rubygems.org/api/v1/versions/#{libv8_gem_name}.json"))
+  json = JSON.parse(body)
+
+  versions = json.select do |v|
+    Gem::Version.new(v['number']) == Gem::Version.new(libv8_version)
+  end
+  abort(<<-ERROR) if versions.empty?
+  ERROR: could not find #{libv8_version}
+  ERROR
+
+  platform_versions = versions.select do |v|
+    parse_platform(v['platform']) == ruby_platform
+  end
+  abort(<<-ERROR) if platform_versions.empty?
+  ERROR: found #{libv8_gem_name}-#{libv8_version}, but no binary for #{ruby_platform}
+         try "gem install #{libv8_gem_name} -v '#{libv8_version}'" to attempt to build libv8 from source
+  ERROR
+
+  platform_versions.first
+end
+
+def libv8_download_uri(name, version, platform)
+  URI("https://rubygems.org/downloads/#{name}-#{version}-#{platform}.gem")
+end
+
+def libv8_downloaded_gem(name, version, platform)
+  "#{name}-#{version}-#{platform}.gem"
+end
+
+def libv8_download(name, version, platform)
+  FileUtils.mkdir_p(vendor_path)
+  body = http_get(libv8_download_uri(name, version, platform))
+  File.open(File.join(vendor_path, libv8_downloaded_gem(name, version, platform)), 'wb') { |f| f.write(body) }
+end
+
+def libv8_vendor!
+  version = libv8_remote_search
+
+  puts "downloading #{libv8_downloaded_gem(libv8_gem_name, version['number'], version['platform'])} to #{vendor_path}"
+  libv8_download(libv8_gem_name, version['number'], version['platform'])
+
+  package = Gem::Package.new(File.join(vendor_path, libv8_downloaded_gem(libv8_gem_name, version['number'], version['platform'])))
+  package.extract_files(File.join(vendor_path, File.basename(libv8_downloaded_gem(libv8_gem_name, version['number'], version['platform']), '.gem')))
+
+  libv8_vendor_path
+end
+
+def ensure_libv8_load_path
+  puts "detected platform #{RUBY_PLATFORM} => #{ruby_platform}"
+
+  libv8_path = libv8_local_path || libv8_vendor_path || libv8_vendor!
+
+  abort(<<-ERROR) unless libv8_path
+  ERROR: could not find #{libv8_gem_name}
+  ERROR
+
+  $LOAD_PATH.unshift(File.join(libv8_path, 'ext'))
+  $LOAD_PATH.unshift(File.join(libv8_path, 'lib'))
+end
+
+ensure_libv8_load_path
+
+require 'libv8'
 
 IS_DARWIN = RUBY_PLATFORM =~ /darwin/
-IS_SOLARIS = RUBY_PLATFORM =~ /solaris/
 
 have_library('pthread')
 have_library('objc') if IS_DARWIN
-$CPPFLAGS.gsub! /-std=[^\s]+/, ''
+cppflags_clear_std!
 $CPPFLAGS += " -Wall" unless $CPPFLAGS.split.include? "-Wall"
 $CPPFLAGS += " -g" unless $CPPFLAGS.split.include? "-g"
 $CPPFLAGS += " -rdynamic" unless $CPPFLAGS.split.include? "-rdynamic"
 $CPPFLAGS += " -fPIC" unless $CPPFLAGS.split.include? "-rdynamic" or IS_DARWIN
 $CPPFLAGS += " -std=c++0x"
 $CPPFLAGS += " -fpermissive"
-$CPPFLAGS += " -fno-omit-frame-pointer"
-if enable_config('avx2')
-  $CPPFLAGS += " -mavx2"
-else
-  $CPPFLAGS += " -mssse3"
-end
+cppflags_add_frame_pointer!
+cppflags_add_cpu_extension!
 
 $CPPFLAGS += " -Wno-reserved-user-defined-literal" if IS_DARWIN
 
@@ -61,101 +228,6 @@ if enable_config('debug') || enable_config('asan')
   CONFIG['debugflags'] << ' -ggdb3 -O0'
 end
 
-def fixup_libtinfo
-  dirs = %w[/lib64 /usr/lib64 /lib /usr/lib]
-  found_v5 = dirs.map { |d| "#{d}/libtinfo.so.5" }.find &File.method(:file?)
-  return '' if found_v5
-  found_v6 = dirs.map { |d| "#{d}/libtinfo.so.6" }.find &File.method(:file?)
-  return '' unless found_v6
-  FileUtils.ln_s found_v6, 'gemdir/libtinfo.so.5', :force => true
-  "LD_LIBRARY_PATH='#{File.expand_path('gemdir')}:#{ENV['LD_LIBRARY_PATH']}'"
-end
-
-def libv8_gem_name
-  return "libv8-solaris" if IS_SOLARIS
-
-  is_musl = false
-  begin
-    is_musl = !!(File.read('/proc/self/maps') =~ /ld-musl-x86_64/)
-  rescue; end
-
-  is_musl ? 'libv8-alpine' : 'libv8'
-end
-
-# 1) old rubygem versions prefer source gems to binary ones
-# ... and their --platform switch is broken too, as it leaves the 'ruby'
-# platform in Gem.platforms.
-# 2) the ruby binaries distributed with alpine (platform ending in -musl)
-# refuse to load binary gems by default
-def force_platform_gem
-  gem_version = `gem --version`
-  return 'gem' unless $?.success?
-
-  if RUBY_PLATFORM != 'x86_64-linux-musl'
-    return 'gem' if gem_version.to_f.zero? || gem_version.to_f >= 2.3
-    return 'gem' if RUBY_PLATFORM != 'x86_64-linux'
-  end
-
-  gem_binary = `which gem`
-  return 'gem' unless $?.success?
-
-  ruby = File.foreach(gem_binary.strip).first.sub(/^#!/, '').strip
-  unless File.file? ruby
-    warn "No valid ruby: #{ruby}"
-    return 'gem'
-  end
-
-  require 'tempfile'
-  file = Tempfile.new('sq_mini_racer')
-  file << <<EOS
-require 'rubygems'
-platforms = Gem.platforms
-platforms.reject! { |it| it == 'ruby' }
-if platforms.empty?
-  platforms << Gem::Platform.new('x86_64-linux')
-end
-Gem.send(:define_method, :platforms) { platforms }
-#{IO.read(gem_binary.strip)}
-EOS
-  file.close
-  "#{ruby} '#{file.path}'"
-end
-
-LIBV8_VERSION = '7.3.492.27.1'
-libv8_glob = "**/*-#{LIBV8_VERSION}-*/**/libv8.rb"
-libv8_rb = Dir.glob(libv8_glob).first
-FileUtils.mkdir_p('gemdir')
-unless libv8_rb
-  gem_name = libv8_gem_name
-  cmd = "#{fixup_libtinfo} #{force_platform_gem} install --version '= #{LIBV8_VERSION}' --install-dir gemdir #{gem_name}"
-  puts "Will try downloading #{gem_name} gem: #{cmd}"
-  `#{cmd}`
-  unless $?.success?
-    warn <<EOS
-
-WARNING: Could not download a private copy of the libv8 gem. Please make
-sure that you have internet access and that the `gem` binary is available.
-
-EOS
-  end
-
-  libv8_rb = Dir.glob(libv8_glob).first
-  unless libv8_rb
-    warn <<EOS
-
-WARNING: Could not find libv8 after the local copy of libv8 having supposedly
-been installed.
-
-EOS
-  end
-end
-
-if libv8_rb
-  $:.unshift(File.dirname(libv8_rb) + '/../ext')
-  $:.unshift File.dirname(libv8_rb)
-end
-
-require 'libv8'
 Libv8.configure_makefile
 
 if enable_config('asan')
