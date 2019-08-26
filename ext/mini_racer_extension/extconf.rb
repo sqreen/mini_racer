@@ -98,8 +98,18 @@ def ruby_platform
   parse_platform(RUBY_PLATFORM)
 end
 
+def http_get(uri)
+  Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == 'https') do |http|
+    res = http.get(uri.path)
+
+    abort("HTTP error #{res.code}: #{uri}") unless res.code == '200'
+
+    return res.body
+  end
+end
+
 def libv8_remote_search
-  body = Net::HTTP.get(URI("https://rubygems.org/api/v1/versions/#{libv8_gem_name}.json"))
+  body = http_get(URI("https://rubygems.org/api/v1/versions/#{libv8_gem_name}.json"))
   json = JSON.parse(body)
 
   versions = json.select do |v|
@@ -130,7 +140,7 @@ end
 
 def libv8_download(name, version, platform)
   FileUtils.mkdir_p(vendor_path)
-  body = Net::HTTP.get(libv8_download_uri(name, version, platform))
+  body = http_get(libv8_download_uri(name, version, platform))
   File.open(File.join(vendor_path, libv8_downloaded_gem(name, version, platform)), 'wb') { |f| f.write(body) }
 end
 
