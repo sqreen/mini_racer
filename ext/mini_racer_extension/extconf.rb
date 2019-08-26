@@ -3,6 +3,7 @@ require 'mkmf'
 require 'fileutils'
 
 IS_SOLARIS = RUBY_PLATFORM =~ /solaris/
+IS_LINUX_MUSL = RUBY_PLATFORM =~ /linux-musl/
 
 def cppflags_clear_std!
   $CPPFLAGS.gsub! /-std=[^\s]+/, ''
@@ -32,13 +33,9 @@ end
 
 def libv8_gem_name
   return "libv8-solaris" if IS_SOLARIS
+  return "libv8-alpine" if IS_LINUX_MUSL
 
-  is_musl = false
-  begin
-    is_musl = !!(File.read('/proc/self/maps') =~ /ld-musl-x86_64/)
-  rescue; end
-
-  is_musl ? 'libv8-alpine' : 'libv8'
+  'libv8'
 end
 
 # 1) old rubygem versions prefer source gems to binary ones
