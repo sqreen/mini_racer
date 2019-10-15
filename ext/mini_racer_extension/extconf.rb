@@ -91,7 +91,10 @@ def libv8_vendor_path
 end
 
 def parse_platform(str)
-  Gem::Platform.new(str).tap { |p| p.instance_eval { @os = 'linux-musl' } if str =~ /musl/ }
+  Gem::Platform.new(str).tap do |p|
+    p.instance_eval { @os = 'linux-musl' } if str =~ /musl/
+    p.instance_eval { @cpu = 'x86_64' } if str =~ /universal.*darwin/
+  end
 end
 
 def ruby_platform
@@ -120,7 +123,7 @@ def libv8_remote_search
   ERROR
 
   platform_versions = versions.select do |v|
-    parse_platform(v['platform']) == ruby_platform
+    parse_platform(v['platform']) == ruby_platform unless v['platform'] =~ /universal.*darwin/
   end
   abort(<<-ERROR) if platform_versions.empty?
   ERROR: found #{libv8_gem_name}-#{libv8_version}, but no binary for #{ruby_platform}
