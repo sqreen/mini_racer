@@ -44,9 +44,9 @@ def libv8_gemspec
   "#{libv8_basename}.gemspec"
 end
 
-def libv8_local_path
+def libv8_local_path(path=Gem.path)
   puts "looking for #{libv8_gemspec} in installed gems"
-  candidates = Gem.path.map { |p| File.join(p, 'specifications', libv8_gemspec) }
+  candidates = path.map { |p| File.join(p, 'specifications', libv8_gemspec) }
   found = candidates.select { |f| File.exist?(f) }.first
 
   unless found
@@ -147,7 +147,22 @@ def libv8_download(name, version, platform)
   File.open(File.join(vendor_path, libv8_downloaded_gem(name, version, platform)), 'wb') { |f| f.write(body) }
 end
 
+def libv8_install!
+  cmd = "gem install #{libv8_gem_name} --version '#{libv8_version}' --install-dir '#{vendor_path}'"
+  puts "installing #{libv8_gem_name} using `#{cmd}`"
+  rc = system(cmd)
+
+  abort(<<-ERROR) unless rc
+  ERROR: could not install #{libv8_gem_name} #{libv8_version}
+          try "gem install #{libv8_gem_name} -v '#{libv8_version}'" to attempt to build libv8 from source
+  ERROR
+
+  libv8_local_path([vendor_path])
+end
+
 def libv8_vendor!
+  return libv8_install! if Gem::VERSION < '2.0'
+
   version = libv8_remote_search
 
   puts "downloading #{libv8_downloaded_gem(libv8_gem_name, version['number'], version['platform'])} to #{vendor_path}"
