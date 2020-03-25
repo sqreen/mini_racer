@@ -92,7 +92,7 @@ end
 
 def parse_platform(str)
   Gem::Platform.new(str).tap do |p|
-    p.instance_eval { @os = 'linux-musl' } if str =~ /musl/
+    p.instance_eval { @os = 'linux-musl' } if str =~ /musl/ and p.version == nil
     p.instance_eval { @cpu = 'x86_64' } if str =~ /universal.*darwin/
   end
 end
