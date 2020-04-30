@@ -40,8 +40,13 @@ def libv8_basename
   "#{libv8_gem_name}-#{libv8_version}-#{ruby_platform}"
 end
 
+def libv8_gem_dirname
+  platform_no_libc = ruby_platform.to_s.split('-')[0..1].join('-')
+  "#{libv8_gem_name}-#{libv8_version}-#{platform_no_libc}"
+end
+
 def libv8_gemspec
-  "#{libv8_basename}.gemspec"
+  "#{libv8_gem_dirname}.gemspec"
 end
 
 def libv8_local_path(path=Gem.path)
@@ -56,7 +61,7 @@ def libv8_local_path(path=Gem.path)
 
   puts "found in installed specs: #{found}"
 
-  dir = File.expand_path(File.join(found, '..', '..', 'gems', libv8_basename))
+  dir = File.expand_path(File.join(found, '..', '..', 'gems', libv8_gem_dirname))
 
   unless Dir.exist?(dir)
     puts "not found in installed gems: #{dir}"
