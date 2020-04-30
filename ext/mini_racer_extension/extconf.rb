@@ -182,7 +182,10 @@ end
 def ensure_libv8_load_path
   puts "detected platform #{RUBY_PLATFORM} => #{ruby_platform}"
 
-  libv8_path = libv8_local_path || libv8_vendor_path || libv8_vendor!
+  libv8_path = libv8_local_path
+  unless ENV['ONLY_INSTALLED_LIBV8_GEM']
+    libv8_path ||= libv8_vendor_path || libv8_vendor!
+  end
 
   abort(<<-ERROR) unless libv8_path
   ERROR: could not find #{libv8_gem_name}
