@@ -40,28 +40,32 @@ def libv8_basename
   "#{libv8_gem_name}-#{libv8_version}-#{ruby_platform}"
 end
 
-def libv8_gem_dirname
+def libv8_gemspec_no_libc
   platform_no_libc = ruby_platform.to_s.split('-')[0..1].join('-')
-  "#{libv8_gem_name}-#{libv8_version}-#{platform_no_libc}"
+  "#{libv8_gem_name}-#{libv8_version}-#{platform_no_libc}.gemspec"
 end
 
 def libv8_gemspec
-  "#{libv8_gem_dirname}.gemspec"
+  "#{libv8_basename}.gemspec"
 end
 
 def libv8_local_path(path=Gem.path)
-  puts "looking for #{libv8_gemspec} in installed gems"
-  candidates = path.map { |p| File.join(p, 'specifications', libv8_gemspec) }
+  gemspecs = [libv8_gemspec, libv8_gemspec_no_libc].uniq
+  puts "looking for #{gemspecs.join(', ')} in installed gems"
+  candidates = path.product(gemspecs)
+    .map { |(p, gemspec)| File.join(p, 'specifications', gemspec) }
+  p candidates
   found = candidates.select { |f| File.exist?(f) }.first
 
   unless found
-    puts "#{libv8_gemspec} not found in installed gems"
+    puts "#{gemspecs.join(', ')} not found in installed gems"
     return
   end
 
   puts "found in installed specs: #{found}"
 
-  dir = File.expand_path(File.join(found, '..', '..', 'gems', libv8_gem_dirname))
+  gemdir = File.basename(found, '.gemspec')
+  dir = File.expand_path(File.join(found, '..', '..', 'gems', gemdir))
 
   unless Dir.exist?(dir)
     puts "not found in installed gems: #{dir}"
@@ -97,7 +101,6 @@ end
 
 def parse_platform(str)
   Gem::Platform.new(str).tap do |p|
-    p.instance_eval { @os = 'linux-musl' } if str =~ /musl/
     p.instance_eval { @cpu = 'x86_64' } if str =~ /universal.*darwin/
   end
 end
