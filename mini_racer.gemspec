@@ -14,6 +14,12 @@ Gem::Specification.new do |spec|
   spec.homepage      = "https://github.com/sqreen/mini_racer"
   spec.license       = "MIT"
 
+  spec.metadata      = {
+    "bug_tracker_uri"   => "https://github.com/discourse/mini_racer/issues",
+    "changelog_uri"     => "https://github.com/discourse/mini_racer/blob/v#{spec.version}/CHANGELOG",
+    "documentation_uri" => "https://www.rubydoc.info/gems/mini_racer/#{spec.version}",
+    "source_code_uri"   => "https://github.com/discourse/mini_racer/tree/v#{spec.version}",
+  } if spec.respond_to?(:metadata=)
 
   REJECTS            = %r{\A((benchmark|test|spec|features|examples)/|bench\.rb|.+\.sh|Jenkinsfile)}
   spec.files         = `git ls-files -z`.split("\x0").reject { |f| f.match(REJECTS) }
@@ -21,9 +27,9 @@ Gem::Specification.new do |spec|
   spec.executables   = spec.files.grep(%r{^exe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  spec.add_development_dependency "bundler", "~> 1.12"
+  spec.add_development_dependency "bundler"
   spec.add_development_dependency "rake", "~> 10.0"
-  spec.add_development_dependency "minitest", "~> 5.0"
+  spec.add_development_dependency "minitest", "~> 5.0", '< 5.13'
   spec.add_development_dependency "rake-compiler"
 
   spec.require_paths = ["lib", "ext"]

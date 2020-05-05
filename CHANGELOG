@@ -1,3 +1,27 @@
+- 0.2.10
+
+- 22-04-2020
+
+  - FEATURE: memory softlimit support for nogvl_context_call
+
+- 0.2.9
+
+- 09-01-2020
+
+  - FIX: correct segfault when JS returns a Symbol and properly cast to ruby symbol
+
+- 0.2.8
+
+- 11-11-2019
+
+  - FIX: ensure thread live cycle is properly accounter for following file descriptor fix
+
+- 0.2.7
+
+- 11-11-2019
+
+  - FIX: release the file descriptor for timeout pipe earlier (this avoids holding too many files open in Ruby 2.7)
+
 - 14-05-2019
 
 - 0.2.6

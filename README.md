@@ -277,7 +277,7 @@ context.eval js
 The same code without the harmony runtime flag results in a `MiniRacer::RuntimeError: RangeError: Maximum call stack size exceeded` exception.
 Please refer to http://node.green/ as a reference on other harmony features.
 
-A list of all V8 runtime flags can be found using `node --v8-options`, or else by perusing [the V8 source code for flags (make sure to use the right version of V8)](https://github.com/v8/v8/blob/master/src/flag-definitions.h).
+A list of all V8 runtime flags can be found using `node --v8-options`, or else by perusing [the V8 source code for flags (make sure to use the right version of V8)](https://github.com/v8/v8/blob/master/src/flags/flag-definitions.h).
 
 Note that runtime flags must be set before any other operation (e.g. creating a context, a snapshot or an isolate), otherwise an exception will be thrown.
 
@@ -451,7 +451,7 @@ Add this to your .travis.yml file:
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/discourse/mini_racer. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
+Bug reports and pull requests are welcome on GitHub at https://github.com/rubyjs/mini_racer. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
 
 
 ## License

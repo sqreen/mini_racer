@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'securerandom'
 require 'date'
 require_relative 'test_helper'
@@ -289,15 +291,15 @@ raise FooError, "I like foos"
     context = MiniRacer::Context.new
     context.eval('function test(arg) { return "saw " + arg; }')
 
-    bad_utf8 = "\x80"
+    bad_utf8 = "\x80".dup
     if bad_utf8.encoding != Encoding::UTF_8
       bad_utf8 = bad_utf8.force_encoding('UTF-8')
     end
 
     assert_equal bad_utf8.encoding, Encoding::UTF_8
     assert_equal("saw \u0080", context.call('test', bad_utf8))
-    assert_equal("saw \u0080", context.call('test', "\x80".force_encoding('ASCII-8BIT')))
-    assert_equal("saw \u0080", context.call('test', "\x80".force_encoding('ISO-8859-1')))
+    assert_equal("saw \u0080", context.call('test', "\x80".dup.force_encoding('ASCII-8BIT')))
+    assert_equal("saw \u0080", context.call('test', "\x80".dup.force_encoding('ISO-8859-1')))
   end
 
   def test_conversion_to_utf8
@@ -306,7 +308,7 @@ raise FooError, "I like foos"
 
     assert_equal("saw real string", context.call("test", "real string"))
 
-    euro = "\x80".force_encoding(Encoding::WINDOWS_1252) # euro!
+    euro = "\x80".dup.force_encoding(Encoding::WINDOWS_1252) # euro!
     assert_equal("saw \u20AC", context.call('test', euro))
   end
 
@@ -315,7 +317,7 @@ raise FooError, "I like foos"
     context.eval('function test(arg) { return "saw " + arg; }')
 
     # euro, but ruby doesn't do the conversion
-    euro = "\x80".force_encoding(Encoding::WINDOWS_1258)
+    euro = "\x80".dup.force_encoding(Encoding::WINDOWS_1258)
     begin
       euro.encode(Encoding::UTF_8)
       skip 'Expected ruby not to know how to do this conversion'
@@ -331,7 +333,7 @@ raise FooError, "I like foos"
     context = MiniRacer::Context.new
     context.eval('function test(arg) { return "saw " + Object.keys(arg[0]) + " => " + Object.values(arg[0]); }')
 
-    assert_equal "saw \u0081 => \u0080", context.call("test", [{"\x81" => ["\x80".force_encoding('ASCII-8BIT')]}])
+    assert_equal "saw \u0081 => \u0080", context.call("test", [{"\x81" => ["\x80".dup.force_encoding('ASCII-8BIT')]}])
   end
 
   def test_io_object_arg
@@ -347,6 +349,33 @@ raise FooError, "I like foos"
     context = MiniRacer::Context.new(max_memory: 200_000_000)
 
     assert_raises(MiniRacer::V8OutOfMemoryError) { context.eval('let s = 1000; var a = new Array(s); a.fill(0); while(true) {s *= 1.1; let n = new Array(Math.floor(s)); n.fill(0); a = a.concat(n); };') }
+  end
+
+  def test_max_memory_for_call
+    context = MiniRacer::Context.new(max_memory: 200_000_000)
+    context.eval(<<JS)
+      let s;
+      function memory_test() {
+        var a = new Array(s);
+        a.fill(0);
+        while(true) {
+          s *= 1.1;
+          let n = new Array(Math.floor(s));
+          n.fill(0);
+          a = a.concat(n);
+          if (s > 1000000) {
+            return;
+          }
+        }
+      }
+      function set_s(val) {
+        s = val;
+      }
+JS
+    context.call('set_s', 1000)
+    assert_raises(MiniRacer::V8OutOfMemoryError) { context.call('memory_test') }
+    s = context.eval('s')
+    assert_operator(s, :>, 100_000)
   end
 
   def test_negative_max_memory
@@ -784,7 +813,7 @@ raise FooError, "I like foos"
     isolate = MiniRacer::Isolate.new
     context = MiniRacer::Context.new(isolate: isolate)
     context.dispose
-    MiniRacer::Context.new(isolate: isolate) # Received signal 11 SEGV_MAPERR
+    _context2 = MiniRacer::Context.new(isolate: isolate) # Received signal 11 SEGV_MAPERR
   end
 
   def test_context_starts_with_no_isolate_value
@@ -810,7 +839,6 @@ raise FooError, "I like foos"
   end
 
   def test_heap_dump
-
     f = Tempfile.new("heap")
     path = f.path
     f.unlink
@@ -824,7 +852,40 @@ raise FooError, "I like foos"
     assert dump.length > 0
 
     FileUtils.rm(path)
+  end
 
+  def test_pipe_leak
+    # in Ruby 2.7 pipes will stay open for longer
+    # make sure that we clean up early so pipe file
+    # descriptors are not kept around
+    context = MiniRacer::Context.new(timeout: 1000)
+    10000.times do |i|
+      context.eval("'hello'")
+    end
+  end
+
+  def test_symbol_support
+    context = MiniRacer::Context.new()
+    assert_equal :foo, context.eval("Symbol('foo')")
+  end
+
+  def test_proxy_support
+    js = <<JS
+      function MyProxy(reference) {
+        return new Proxy(function() {}, {
+          get: function(obj, prop) {
+            return new MyProxy(reference.concat(prop));
+          },
+          apply: function(target, thisArg, argumentsList) {
+            myFunctionLogger(reference);
+          }
+        });
+      };
+      (new MyProxy([])).function_call(new MyProxy([])-1)
+JS
+    context = MiniRacer::Context.new()
+    context.attach('myFunctionLogger', ->(property) { })
+    context.eval(js)
   end
 end
 end
