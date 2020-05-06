@@ -2,11 +2,46 @@ require "bundler/gem_tasks"
 require "rake/testtask"
 require "rake/extensiontask"
 
-Rake::TestTask.new(:test) do |t|
-  t.libs << "test"
-  t.libs << "lib"
+class ValgrindTestTask < Rake::TestTask
+  VALGRIND_EXEC = 'valgrind'
+  DEFAULT_VALGRIND_OPTS = %w{
+    --trace-children=yes
+    --partial-loads-ok=yes
+    --error-limit=no
+    --error-exitcode=33
+    --num-callers=100
+    --suppressions=valgrind.supp
+    --gen-suppressions=all
+  }
+
+  attr_accessor :valgrind_args
+
+  def initialize(name=:valgrind_test)
+    @valgrind_args = DEFAULT_VALGRIND_OPTS
+    super
+  end
+
+  # see original def in fileutils.rb
+  def ruby(*args, &block)
+    options = (Hash === args.last) ? args.pop : {}
+    if args.length > 1
+      sh(*([VALGRIND_EXEC] + valgrind_args + [RUBY] + args + [options]), &block)
+    else
+      # if the size is 1 it's assumed the arguments are already escaped
+      non_escaped_args = [VALGRIND_EXEC] + valgrind_args + [RUBY]
+      sh("#{non_escaped_args.map(&:shellescape).join(' ')} #{args.first}", options, &block)
+    end
+  end
+end
+
+test_task_cfg = Proc.new do |t|
+  t.libs << 'test'
+  t.libs << 'lib'
   t.test_files = FileList['test/**/*_test.rb']
 end
+
+Rake::TestTask.new(:test, &test_task_cfg)
+ValgrindTestTask.new(:'test:valgrind', &test_task_cfg)
 
 task :default => [:compile, :test]
 
@@ -16,61 +51,6 @@ Rake::ExtensionTask.new( 'mini_racer_extension', gem ) do |ext|
 end
 Rake::ExtensionTask.new('prv_ext_loader', gem)
 
-
-# via http://blog.flavorjon.es/2009/06/easily-valgrind-gdb-your-ruby-c.html
-namespace :test do
-  desc "run test suite with Address Sanitizer"
-  task :asan do
-    ENV["CONFIGURE_ARGS"] = [ENV["CONFIGURE_ARGS"], '--enable-asan'].compact.join(' ')
-    Rake::Task['compile'].invoke
-
-    asan_path = `ldconfig -N -p |grep libasan | grep -v 32 | sed 's/.* => \\(.*\\)$/\\1/'`.chomp.split("\n")[-1]
-
-
-    cmdline = "env LD_PRELOAD=\"#{asan_path}\" ruby test/test_leak.rb"
-    puts cmdline
-    system cmdline
-
-    cmdline = "env LD_PRELOAD=\"#{asan_path}\" rake test"
-    puts cmdline
-    system cmdline
-  end
-  # partial-loads-ok and undef-value-errors necessary to ignore
-  # spurious (and eminently ignorable) warnings from the ruby
-  # interpreter
-  VALGRIND_BASIC_OPTS = "--num-callers=50 --error-limit=no \
-                         --partial-loads-ok=yes --undef-value-errors=no"
-
-  desc "run test suite under valgrind with basic ruby options"
-  task :valgrind => :compile do
-    cmdline = "valgrind #{VALGRIND_BASIC_OPTS} ruby test/test_leak.rb"
-    puts cmdline
-    system cmdline
-  end
-
-  desc "run test suite under valgrind with leak-check=full"
-  task :valgrind_leak_check => :compile do
-    cmdline = "valgrind #{VALGRIND_BASIC_OPTS} --leak-check=full ruby test/test_leak.rb"
-    puts cmdline
-    require 'open3'
-    _, stderr = Open3.capture3(cmdline)
-
-    section = ""
-    stderr.split("\n").each do |line|
-
-      if line =~ /==.*==\s*$/
-        if (section =~ /mini_racer|SUMMARY/)
-          puts
-          puts section
-          puts
-        end
-        section = ""
-      else
-        section << line << "\n"
-      end
-    end
-  end
-end
 
 desc 'run clang-tidy linter on mini_racer_extension.cc'
 task :lint do

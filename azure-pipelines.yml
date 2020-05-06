@@ -1,0 +1,61 @@
+jobs:
+  - template: azure-template.yml
+    parameters:
+      name: linux_1_9
+      displayName: Linux Ruby 1.9
+      rubyVersion: '1.9'
+
+  - template: azure-template.yml
+    parameters:
+      name: linux_2_0
+      displayName: Linux Ruby 2.0
+      rubyVersion: '2.0'
+      publishCoverage: true
+
+  - template: azure-template.yml
+    parameters:
+      name: linux_2_1
+      displayName: Linux Ruby 2.1
+      rubyVersion: '2.1'
+
+  - template: azure-template.yml
+    parameters:
+      name: linux_2_2
+      displayName: Linux Ruby 2.2
+      rubyVersion: '2.2'
+
+  - template: azure-template.yml
+    parameters:
+      name: linux_2_3
+      displayName: Linux Ruby 2.3
+      rubyVersion: '2.3'
+
+  - template: azure-template.yml
+    parameters:
+      name: linux_2_4
+      displayName: Linux Ruby 2.4
+      rubyVersion: '2.4'
+
+  - template: azure-template.yml
+    parameters:
+      name: linux_2_5
+      displayName: Linux Ruby 2.5
+      rubyVersion: '2.5'
+
+  - template: azure-template.yml
+    parameters:
+      name: linux_2_6
+      displayName: Linux Ruby 2.6
+      rubyVersion: '2.6'
+
+  - template: azure-template.yml
+    parameters:
+      name: linux_2_7
+      displayName: Linux Ruby 2.7
+      rubyVersion: '2.7'
+
+  - template: azure-template.yml
+    parameters:
+      name: macos_10_14
+      displayName: MacOS 10.14
+      imageName: 'macos-10.14'

@@ -352,6 +352,7 @@ raise FooError, "I like foos"
   end
 
   def test_max_memory_for_call
+    skip 'not with valgrind' if valgrind?
     context = MiniRacer::Context.new(max_memory: 200_000_000)
     context.eval(<<JS)
       let s;
@@ -886,6 +887,15 @@ JS
     context = MiniRacer::Context.new()
     context.attach('myFunctionLogger', ->(property) { })
     context.eval(js)
+  end
+
+  private
+
+  def valgrind?
+    unless defined?(@valgrind)
+      @valgrind = ENV['LD_PRELOAD'] && ENV['LD_PRELOAD'].include?('valgrind')
+    end
+    @valgrind
   end
 end
 end

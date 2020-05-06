@@ -224,6 +224,9 @@ if ENV['CXX']
   puts "SETTING CXX"
   CONFIG['CXX'] = ENV['CXX']
 end
+# 1.9 has no $CXXFLAGS
+$CPPFLAGS += " #{ENV['CPPFLAGS']}" if ENV['CPPFLAGS']
+$LDFLAGS  += " #{ENV['LDFLAGS']}" if ENV['LDFLAGS']
 
 CXX11_TEST = <<EOS
 #if __cplusplus <= 199711L
