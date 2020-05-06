@@ -56,6 +56,20 @@ jobs:
 
   - template: azure-template.yml
     parameters:
+      name: linux_2_7_mini_racer
+      displayName: Linux Ruby 2.7 (with mini_racer)
+      rubyVersion: '2.7'
+      with_mini_racer: true
+
+  - template: azure-template.yml
+    parameters:
+      name: linux_2_7_therubyracer
+      displayName: Linux Ruby 2.7 (with therubyracer)
+      rubyVersion: '2.7'
+      with_therubyracer: true
+
+  - template: azure-template.yml
+    parameters:
       name: macos_10_14
       displayName: MacOS 10.14
       imageName: 'macos-10.14'
