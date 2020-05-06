@@ -679,7 +679,7 @@ JS
 
   def test_timeout_in_ruby_land
     context = MiniRacer::Context.new(timeout: 50)
-    context.attach('sleep', proc{ sleep 0.1 })
+    context.attach('sleep', proc{ sleep 0.5 })
     assert_raises(MiniRacer::ScriptTerminatedError) do
       context.eval('sleep(); "hi";')
     end
