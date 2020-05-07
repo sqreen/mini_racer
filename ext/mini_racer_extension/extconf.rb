@@ -33,7 +33,7 @@ def libv8_gem_name
 end
 
 def libv8_version
-  '7.3.492.27.1'
+  '8.4.307.0.1'
 end
 
 def libv8_basename
