@@ -30,7 +30,7 @@ class ValgrindTestTask < Rake::TestTask
       # if the size is 1 it's assumed the arguments are already escaped
       non_escaped_args = [VALGRIND_EXEC] + valgrind_args + [RUBY]
       sh("#{non_escaped_args.map(&:shellescape).join(' ')} #{args.first}", options, &block)
-    end
+  end
   end
 end
 
@@ -38,19 +38,20 @@ test_task_cfg = Proc.new do |t|
   t.libs << 'test'
   t.libs << 'lib'
   t.test_files = FileList['test/**/*_test.rb']
-end
+  end
 
 Rake::TestTask.new(:test, &test_task_cfg)
 ValgrindTestTask.new(:'test:valgrind', &test_task_cfg)
 
 task :default => [:compile, :test]
 
-gem = Gem::Specification.load( File.dirname(__FILE__) + '/sq_mini_racer.gemspec' )
+gem = Gem::Specification.load( File.dirname(__FILE__) + '/mini_racer.gemspec' )
+Rake::ExtensionTask.new( 'mini_racer_loader', gem ) do |ext|
+  ext.name = 'sq_mini_racer_loader'
+end
 Rake::ExtensionTask.new( 'mini_racer_extension', gem ) do |ext|
   ext.name = 'sq_mini_racer_extension'
 end
-Rake::ExtensionTask.new('prv_ext_loader', gem)
-
 
 desc 'run clang-tidy linter on mini_racer_extension.cc'
 task :lint do

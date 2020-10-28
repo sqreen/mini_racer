@@ -1,12 +1,6 @@
 jobs:
   - template: azure-template.yml
     parameters:
-      name: linux_1_9
-      displayName: Linux Ruby 1.9
-      rubyVersion: '1.9'
-
-  - template: azure-template.yml
-    parameters:
       name: linux_2_0
       displayName: Linux Ruby 2.0
       rubyVersion: '2.0'

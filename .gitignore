@@ -13,5 +13,10 @@ lib/*.so
 *.bundle
 /mini_racer.config
 /mini_racer.creator
+/mini_racer.creator.user
 /mini_racer.files
-/mini_racer.include
+/mini_racer.includes
+/compile_commands.json
+/.vscode/
+/.clangd/
+/.idea/

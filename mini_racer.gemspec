@@ -28,14 +28,15 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_development_dependency "bundler"
-  spec.add_development_dependency "rake", "~> 10.0"
+  spec.add_development_dependency "rake", ">= 12.3.3"
   spec.add_development_dependency "minitest", "~> 5.0", '< 5.13'
   spec.add_development_dependency 'minitest-junit', '~> 0.2.0'
   spec.add_development_dependency "rake-compiler"
+  spec.add_development_dependency "m"
 
   spec.require_paths = ["lib", "ext"]
 
-  spec.extensions = ["ext/mini_racer_extension/extconf.rb", "ext/prv_ext_loader/extconf.rb"]
+  spec.extensions = ["ext/mini_racer_loader/extconf.rb", "ext/mini_racer_extension/extconf.rb"]
 
-  spec.required_ruby_version = '>= 1.9.3'
+  spec.required_ruby_version = '>= 2.0.0'
 end

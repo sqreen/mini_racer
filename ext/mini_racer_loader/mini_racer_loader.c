@@ -4,7 +4,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-void Init_prv_ext_loader(void);
+// Load a Ruby extension like Ruby does, only with flags that:
+// a) hide symbols from other extensions (RTLD_LOCAL)
+// b) bind symbols tightly (RTLD_DEEPBIND, when available)
+
+void Init_sq_mini_racer_loader(void);
 
 static void *_dln_load(const char *file);
 
@@ -24,6 +28,7 @@ static VALUE _load_shared_lib(VALUE self, volatile VALUE fname)
     return handle ? Qtrue : Qfalse;
 }
 
+// adapted from Ruby's dln.c
 #define INIT_FUNC_PREFIX ((char[]) {'I', 'n', 'i', 't', '_'})
 #define INIT_FUNCNAME(buf, file) do { \
     const char *base = (file); \
@@ -36,6 +41,7 @@ static VALUE _load_shared_lib(VALUE self, volatile VALUE fname)
     *(buf) = tmp; \
 } while(0)
 
+// adapted from Ruby's dln.c
 static size_t _init_funcname(const char **file)
 {
     const char *p = *file,
@@ -55,6 +61,7 @@ static size_t _init_funcname(const char **file)
     return (uintptr_t) ((dot ? dot : p) - base);
 }
 
+// adapted from Ruby's dln.c
 static void *_dln_load(const char *file)
 {
     char *buf;
@@ -108,9 +115,21 @@ failed:
     rb_raise(rb_eLoadError, "%s", error);
 }
 
-void Init_prv_ext_loader()
+__attribute__((visibility("default"))) void Init_sq_mini_racer_loader()
 {
-    VALUE mSqreen = rb_define_module("Sqreen");
-    VALUE mPrvExtLoader = rb_define_module_under(mSqreen, "PrvExtLoader");
-    rb_define_singleton_method(mPrvExtLoader, "load", _load_shared_lib, 1);
+    ID sqreen_id = rb_intern("Sqreen");
+    VALUE mSqreen;
+    if (rb_const_defined(rb_cObject, sqreen_id)) {
+        mSqreen = rb_const_get(rb_cObject, sqreen_id);
+        if (TYPE(mSqreen) != T_MODULE) {
+            rb_raise(rb_eTypeError, "Sqreen is not a module");
+            return;
+        }
+    } else {
+        mSqreen = rb_define_module("Sqreen");
+    }
+
+    VALUE mMiniRacer = rb_define_module_under(mSqreen, "MiniRacer");
+    VALUE mLoader = rb_define_module_under(mMiniRacer, "Loader");
+    rb_define_singleton_method(mLoader, "load", _load_shared_lib, 1);
 }

@@ -33,7 +33,7 @@ def libv8_gem_name
 end
 
 def libv8_version
-  '7.3.492.27.1'
+  '8.4.255.0'
 end
 
 def libv8_basename
@@ -213,6 +213,8 @@ $CPPFLAGS += " -rdynamic" unless $CPPFLAGS.split.include? "-rdynamic"
 $CPPFLAGS += " -fPIC" unless $CPPFLAGS.split.include? "-rdynamic" or IS_DARWIN
 $CPPFLAGS += " -std=c++0x"
 $CPPFLAGS += " -fpermissive"
+$CPPFLAGS += " -DV8_COMPRESS_POINTERS"
+$CPPFLAGS += " -fvisibility=hidden "
 cppflags_add_frame_pointer!
 cppflags_add_cpu_extension!
 
