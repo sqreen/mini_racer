@@ -26,14 +26,11 @@ def cppflags_add_cpu_extension!
 end
 
 def libv8_gem_name
-  return "libv8-solaris" if IS_SOLARIS
-  return "libv8-alpine" if IS_LINUX_MUSL
-
-  'libv8'
+  'libv8-node'
 end
 
 def libv8_version
-  '8.4.255.0'
+  '14.14.0.0.beta1'
 end
 
 def libv8_basename
@@ -90,8 +87,8 @@ def libv8_vendor_path
     return
   end
 
-  puts "looking for #{libv8_basename}/lib/libv8.rb in #{vendor_path}"
-  unless Dir.glob(File.join(vendor_path, libv8_basename, 'lib', 'libv8.rb')).first
+  puts "looking for #{libv8_basename}/lib/libv8-node.rb in #{vendor_path}"
+  unless Dir.glob(File.join(vendor_path, libv8_basename, 'lib', 'libv8-node.rb')).first
     puts "#{libv8_basename}/lib/libv8.rb not found in #{vendor_path}"
     return
   end
@@ -127,7 +124,7 @@ def libv8_remote_search
     Gem::Version.new(v['number']) == Gem::Version.new(libv8_version)
   end
   abort(<<-ERROR) if versions.empty?
-  ERROR: could not find #{libv8_version}
+  ERROR: could not find #{libv8_gem_name} (version #{libv8_version}) in rubygems.org
   ERROR
 
   platform_versions = versions.select do |v|
@@ -200,7 +197,7 @@ end
 
 ensure_libv8_load_path
 
-require 'libv8'
+require 'libv8-node'
 
 IS_DARWIN = RUBY_PLATFORM =~ /darwin/
 
@@ -221,6 +218,7 @@ cppflags_add_cpu_extension!
 $CPPFLAGS += " -Wno-reserved-user-defined-literal" if IS_DARWIN
 
 $LDFLAGS.insert(0, " -stdlib=libc++ ") if IS_DARWIN
+$LDFLAGS += " -Wl,--no-undefined " unless IS_DARWIN
 
 if ENV['CXX']
   puts "SETTING CXX"
@@ -262,7 +260,7 @@ if enable_config('debug') || enable_config('asan')
   CONFIG['debugflags'] << ' -ggdb3 -O0'
 end
 
-Libv8.configure_makefile
+Libv8::Node.configure_makefile
 
 if enable_config('asan')
   $CPPFLAGS.insert(0, " -fsanitize=address ")
