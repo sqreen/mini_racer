@@ -791,7 +791,7 @@ JS
 
     context.eval("'#{"x" * 10_000_000}'")
 
-    sleep 0.005
+    sleep 0.05
 
     end_heap = context.heap_stats[:used_heap_size]
 
