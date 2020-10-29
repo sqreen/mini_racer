@@ -323,7 +323,7 @@ class MiniRacerTest < Minitest::Test
       skip 'Expected ruby not to know how to do this conversion'
     rescue Encoding::ConverterNotFoundError
       # expected
-  end
+    end
 
     # in which case we treat it as latin1
     assert_equal("saw \u0080", context.call('test', euro))
@@ -342,7 +342,7 @@ class MiniRacerTest < Minitest::Test
     context.eval('function test(arg) { return "saw " + arg; }')
 
     output = context.call("test", IO.new(1))
-    assert_match /\Asaw #<IO:/, output
+    assert_match(/\Asaw #<IO:/, output)
   end
 
   def test_max_memory
