@@ -31,7 +31,7 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "rake", ">= 12.3.3"
   spec.add_development_dependency "minitest", "~> 5.0", '< 5.13'
   spec.add_development_dependency 'minitest-junit', '~> 0.2.0'
-  spec.add_development_dependency "rake-compiler"
+  spec.add_development_dependency "rake-compiler", '< 1.0.3' # avoid https://github.com/rake-compiler/rake-compiler/commit/0dc23504cb03ed2fb3c506e1bb58af48d3851d1e
   spec.add_development_dependency "m"
 
   spec.require_paths = ["lib", "ext"]

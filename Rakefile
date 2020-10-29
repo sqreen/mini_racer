@@ -1,6 +1,7 @@
 require "bundler/gem_tasks"
 require "rake/testtask"
 require "rake/extensiontask"
+require "shellwords"
 
 class ValgrindTestTask < Rake::TestTask
   VALGRIND_EXEC = 'valgrind'
@@ -29,7 +30,7 @@ class ValgrindTestTask < Rake::TestTask
     else
       # if the size is 1 it's assumed the arguments are already escaped
       non_escaped_args = [VALGRIND_EXEC] + valgrind_args + [RUBY]
-      sh("#{non_escaped_args.map(&:shellescape).join(' ')} #{args.first}", options, &block)
+      sh("#{non_escaped_args.map { |s| Shellwords.escape(s) }.join(' ')} #{args.first}", options, &block)
   end
   end
 end
