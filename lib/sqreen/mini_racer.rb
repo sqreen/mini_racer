@@ -1,18 +1,18 @@
 require "sqreen/mini_racer/version"
-require "thread"
-require "json"
-require "prv_ext_loader"
+require "sq_mini_racer_loader"
 require "pathname"
 
+ext_filename = "sq_mini_racer_extension.#{RbConfig::CONFIG['DLEXT']}"
+ext_path = $LOAD_PATH.map { |p| Pathname.new(p) }
+ext_found = ext_path.map { |p| p + ext_filename }.find { |p| p.file? }
+
+raise LoadError, "Could not find #{ext_filename} in #{ext_path.map(&:to_s)}" unless ext_found
+Sqreen::MiniRacer::Loader.load(ext_found.to_s)
+
+require "thread"
+require "json"
+
 module Sqreen
-  name = 'sq_mini_racer_extension.' + RbConfig::CONFIG['DLEXT']
-  shlib = $LOAD_PATH
-    .map { |p| (Pathname.new(p) + name) }
-    .find { |p| p.file? }
-
-  raise LoadError, "could not find #{name}" unless shlib
-  PrvExtLoader.load shlib.to_s
-
 # rubocop:disable IndentationConsistency
 module MiniRacer
 
@@ -141,21 +141,29 @@ module MiniRacer
       end
     end
 
-    def initialize(options = nil)
+    def initialize(max_memory: nil, timeout: nil, isolate: nil, ensure_gc_after_idle: nil, snapshot: nil)
       options ||= {}
 
-      check_init_options!(options)
+      check_init_options!(isolate: isolate, snapshot: snapshot, max_memory: max_memory, ensure_gc_after_idle: ensure_gc_after_idle, timeout: timeout)
 
       @functions = {}
       @timeout = nil
       @max_memory = nil
       @current_exception = nil
-      @timeout = options[:timeout]
-      if options[:max_memory].is_a?(Numeric) && options[:max_memory] > 0
-        @max_memory = options[:max_memory]
-      end
+      @timeout = timeout
+      @max_memory = max_memory
+
       # false signals it should be fetched if requested
-      @isolate = options[:isolate] || false
+      @isolate = isolate || false
+
+      @ensure_gc_after_idle = ensure_gc_after_idle
+
+      if @ensure_gc_after_idle
+        @last_eval = nil
+        @ensure_gc_thread = nil
+        @ensure_gc_mutex = Mutex.new
+      end
+
       @disposed = false
 
       @callback_mutex = Mutex.new
@@ -164,7 +172,7 @@ module MiniRacer
       @eval_thread = nil
 
       # defined in the C class
-      init_unsafe(options[:isolate], options[:snapshot])
+      init_unsafe(isolate, snapshot)
     end
 
     def isolate
@@ -214,6 +222,7 @@ module MiniRacer
       end
     ensure
       @eval_thread = nil
+      ensure_gc_thread if @ensure_gc_after_idle
     end
 
     def call(function_name, *arguments)
@@ -227,15 +236,17 @@ module MiniRacer
       end
     ensure
       @eval_thread = nil
+      ensure_gc_thread if @ensure_gc_after_idle
     end
 
     def dispose
       return if @disposed
       isolate_mutex.synchronize do
+        return if @disposed
         dispose_unsafe
-      end
       @disposed = true
       @isolate = nil # allow it to be garbage collected, if set
+    end
     end
 
 
@@ -284,6 +295,38 @@ module MiniRacer
 
   private
 
+    def ensure_gc_thread
+      @last_eval = Sqreen::MiniRacer.monotime
+      @ensure_gc_mutex.synchronize do
+        @ensure_gc_thread = nil if !@ensure_gc_thread || !@ensure_gc_thread.alive?
+        @ensure_gc_thread ||= Thread.new do
+          ensure_gc_after_idle_seconds = @ensure_gc_after_idle / 1000.0
+          done = false
+          while !done
+            now = Sqreen::MiniRacer.monotime
+
+            if @disposed
+              @ensure_gc_thread = nil
+              break
+            end
+
+            if !@eval_thread && ensure_gc_after_idle_seconds < now - @last_eval
+              @ensure_gc_mutex.synchronize do
+                isolate_mutex.synchronize do
+                  if !@eval_thread
+                    isolate.low_memory_notification if !@disposed
+                    @ensure_gc_thread = nil
+                    done = true
+                  end
+                end
+              end
+            end
+            sleep ensure_gc_after_idle_seconds if !done
+          end
+        end
+      end
+    end
+
     def stop_attached
       @callback_mutex.synchronize{
         if @callback_running
@@ -324,17 +367,40 @@ module MiniRacer
 
       # ensure we do not leak a thread in state
       t.join
+      t = nil
 
       rval
-
+    ensure
+      # exceptions need to be handled
+      if t && wp
+        wp.write("done")
+        t.join
+      end
+      wp.close if wp
+      rp.close if rp
     end
 
-    def check_init_options!(options)
-      assert_option_is_nil_or_a('isolate', options[:isolate], Isolate)
-      assert_option_is_nil_or_a('snapshot', options[:snapshot], Snapshot)
+    def check_init_options!(isolate: nil, snapshot: nil, max_memory: nil,
+                            ensure_gc_after_idle: nil, timeout: nil)
+      assert_option_is_nil_or_a('isolate', isolate, Isolate)
+      assert_option_is_nil_or_a('snapshot', snapshot, Snapshot)
 
-      if options[:isolate] && options[:snapshot]
+      assert_numeric_or_nil('max_memory', max_memory, min_value: 10_000)
+      assert_numeric_or_nil('ensure_gc_after_idle', ensure_gc_after_idle, min_value: 1)
+      assert_numeric_or_nil('timeout', timeout, min_value: 1)
+
+      if isolate && snapshot
         raise ArgumentError, 'can only pass one of isolate and snapshot options'
+      end
+    end
+
+    def assert_numeric_or_nil(option_name, object, min_value: nil)
+      if object.is_a?(Numeric) && object < min_value
+        raise ArgumentError, "#{option_name} must be larger than #{min_value}"
+      end
+
+      if !object.nil? && !object.is_a?(Numeric)
+        raise ArgumentError, "#{option_name} must be a number, passed a #{object.inspect}"
       end
     end
 

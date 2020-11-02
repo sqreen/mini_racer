@@ -26,18 +26,20 @@ def cppflags_add_cpu_extension!
 end
 
 def libv8_gem_name
-  return "libv8-solaris" if IS_SOLARIS
-  return "libv8-alpine" if IS_LINUX_MUSL
-
-  'libv8'
+  'libv8-node'
 end
 
 def libv8_version
-  '7.3.492.27.1'
+  '14.14.0.0.beta1'
 end
 
 def libv8_basename
   "#{libv8_gem_name}-#{libv8_version}-#{ruby_platform}"
+end
+
+def libv8_gemspec_no_libc
+  platform_no_libc = ruby_platform.to_s.split('-')[0..1].join('-')
+  "#{libv8_gem_name}-#{libv8_version}-#{platform_no_libc}.gemspec"
 end
 
 def libv8_gemspec
@@ -45,18 +47,22 @@ def libv8_gemspec
 end
 
 def libv8_local_path(path=Gem.path)
-  puts "looking for #{libv8_gemspec} in installed gems"
-  candidates = path.map { |p| File.join(p, 'specifications', libv8_gemspec) }
+  gemspecs = [libv8_gemspec, libv8_gemspec_no_libc].uniq
+  puts "looking for #{gemspecs.join(', ')} in installed gems"
+  candidates = path.product(gemspecs)
+    .map { |(p, gemspec)| File.join(p, 'specifications', gemspec) }
+  p candidates
   found = candidates.select { |f| File.exist?(f) }.first
 
   unless found
-    puts "#{libv8_gemspec} not found in installed gems"
+    puts "#{gemspecs.join(', ')} not found in installed gems"
     return
   end
 
   puts "found in installed specs: #{found}"
 
-  dir = File.expand_path(File.join(found, '..', '..', 'gems', libv8_basename))
+  gemdir = File.basename(found, '.gemspec')
+  dir = File.expand_path(File.join(found, '..', '..', 'gems', gemdir))
 
   unless Dir.exist?(dir)
     puts "not found in installed gems: #{dir}"
@@ -81,8 +87,8 @@ def libv8_vendor_path
     return
   end
 
-  puts "looking for #{libv8_basename}/lib/libv8.rb in #{vendor_path}"
-  unless Dir.glob(File.join(vendor_path, libv8_basename, 'lib', 'libv8.rb')).first
+  puts "looking for #{libv8_basename}/lib/libv8-node.rb in #{vendor_path}"
+  unless Dir.glob(File.join(vendor_path, libv8_basename, 'lib', 'libv8-node.rb')).first
     puts "#{libv8_basename}/lib/libv8.rb not found in #{vendor_path}"
     return
   end
@@ -92,7 +98,6 @@ end
 
 def parse_platform(str)
   Gem::Platform.new(str).tap do |p|
-    p.instance_eval { @os = 'linux-musl' } if str =~ /musl/
     p.instance_eval { @cpu = 'x86_64' } if str =~ /universal.*darwin/
   end
 end
@@ -119,7 +124,7 @@ def libv8_remote_search
     Gem::Version.new(v['number']) == Gem::Version.new(libv8_version)
   end
   abort(<<-ERROR) if versions.empty?
-  ERROR: could not find #{libv8_version}
+  ERROR: could not find #{libv8_gem_name} (version #{libv8_version}) in rubygems.org
   ERROR
 
   platform_versions = versions.select do |v|
@@ -177,7 +182,10 @@ end
 def ensure_libv8_load_path
   puts "detected platform #{RUBY_PLATFORM} => #{ruby_platform}"
 
-  libv8_path = libv8_local_path || libv8_vendor_path || libv8_vendor!
+  libv8_path = libv8_local_path
+  unless ENV['ONLY_INSTALLED_LIBV8_GEM']
+    libv8_path ||= libv8_vendor_path || libv8_vendor!
+  end
 
   abort(<<-ERROR) unless libv8_path
   ERROR: could not find #{libv8_gem_name}
@@ -189,7 +197,7 @@ end
 
 ensure_libv8_load_path
 
-require 'libv8'
+require 'libv8-node'
 
 IS_DARWIN = RUBY_PLATFORM =~ /darwin/
 
@@ -202,17 +210,23 @@ $CPPFLAGS += " -rdynamic" unless $CPPFLAGS.split.include? "-rdynamic"
 $CPPFLAGS += " -fPIC" unless $CPPFLAGS.split.include? "-rdynamic" or IS_DARWIN
 $CPPFLAGS += " -std=c++0x"
 $CPPFLAGS += " -fpermissive"
+$CPPFLAGS += " -DV8_COMPRESS_POINTERS"
+$CPPFLAGS += " -fvisibility=hidden "
 cppflags_add_frame_pointer!
 cppflags_add_cpu_extension!
 
 $CPPFLAGS += " -Wno-reserved-user-defined-literal" if IS_DARWIN
 
 $LDFLAGS.insert(0, " -stdlib=libc++ ") if IS_DARWIN
+$LDFLAGS += " -Wl,--no-undefined " unless IS_DARWIN
 
 if ENV['CXX']
   puts "SETTING CXX"
   CONFIG['CXX'] = ENV['CXX']
 end
+# 1.9 has no $CXXFLAGS
+$CPPFLAGS += " #{ENV['CPPFLAGS']}" if ENV['CPPFLAGS']
+$LDFLAGS  += " #{ENV['LDFLAGS']}" if ENV['LDFLAGS']
 
 CXX11_TEST = <<EOS
 #if __cplusplus <= 199711L
@@ -246,7 +260,7 @@ if enable_config('debug') || enable_config('asan')
   CONFIG['debugflags'] << ' -ggdb3 -O0'
 end
 
-Libv8.configure_makefile
+Libv8::Node.configure_makefile
 
 if enable_config('asan')
   $CPPFLAGS.insert(0, " -fsanitize=address ")

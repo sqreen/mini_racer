@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'securerandom'
 require 'date'
 require_relative 'test_helper'
@@ -184,7 +186,7 @@ class MiniRacerTest < Minitest::Test
     context.attach("adder", proc{ raise FooError, "I like foos" })
     assert_raises do
       begin
-raise FooError, "I like foos"
+        raise FooError, "I like foos"
         context.eval('adder()')
       rescue => e
         assert_equal FooError, e.class
@@ -289,15 +291,15 @@ raise FooError, "I like foos"
     context = MiniRacer::Context.new
     context.eval('function test(arg) { return "saw " + arg; }')
 
-    bad_utf8 = "\x80"
+    bad_utf8 = "\x80".dup
     if bad_utf8.encoding != Encoding::UTF_8
       bad_utf8 = bad_utf8.force_encoding('UTF-8')
     end
 
     assert_equal bad_utf8.encoding, Encoding::UTF_8
     assert_equal("saw \u0080", context.call('test', bad_utf8))
-    assert_equal("saw \u0080", context.call('test', "\x80".force_encoding('ASCII-8BIT')))
-    assert_equal("saw \u0080", context.call('test', "\x80".force_encoding('ISO-8859-1')))
+    assert_equal("saw \u0080", context.call('test', "\x80".dup.force_encoding('ASCII-8BIT')))
+    assert_equal("saw \u0080", context.call('test', "\x80".dup.force_encoding('ISO-8859-1')))
   end
 
   def test_conversion_to_utf8
@@ -306,7 +308,7 @@ raise FooError, "I like foos"
 
     assert_equal("saw real string", context.call("test", "real string"))
 
-    euro = "\x80".force_encoding(Encoding::WINDOWS_1252) # euro!
+    euro = "\x80".dup.force_encoding(Encoding::WINDOWS_1252) # euro!
     assert_equal("saw \u20AC", context.call('test', euro))
   end
 
@@ -315,7 +317,7 @@ raise FooError, "I like foos"
     context.eval('function test(arg) { return "saw " + arg; }')
 
     # euro, but ruby doesn't do the conversion
-    euro = "\x80".force_encoding(Encoding::WINDOWS_1258)
+    euro = "\x80".dup.force_encoding(Encoding::WINDOWS_1258)
     begin
       euro.encode(Encoding::UTF_8)
       skip 'Expected ruby not to know how to do this conversion'
@@ -331,7 +333,7 @@ raise FooError, "I like foos"
     context = MiniRacer::Context.new
     context.eval('function test(arg) { return "saw " + Object.keys(arg[0]) + " => " + Object.values(arg[0]); }')
 
-    assert_equal "saw \u0081 => \u0080", context.call("test", [{"\x81" => ["\x80".force_encoding('ASCII-8BIT')]}])
+    assert_equal "saw \u0081 => \u0080", context.call("test", [{"\x81" => ["\x80".dup.force_encoding('ASCII-8BIT')]}])
   end
 
   def test_io_object_arg
@@ -340,7 +342,7 @@ raise FooError, "I like foos"
     context.eval('function test(arg) { return "saw " + arg; }')
 
     output = context.call("test", IO.new(1))
-    assert_match /\Asaw #<IO:/, output
+    assert_match(/\Asaw #<IO:/, output)
   end
 
   def test_max_memory
@@ -349,9 +351,38 @@ raise FooError, "I like foos"
     assert_raises(MiniRacer::V8OutOfMemoryError) { context.eval('let s = 1000; var a = new Array(s); a.fill(0); while(true) {s *= 1.1; let n = new Array(Math.floor(s)); n.fill(0); a = a.concat(n); };') }
   end
 
+  def test_max_memory_for_call
+    skip 'not with valgrind' if valgrind?
+    context = MiniRacer::Context.new(max_memory: 100_000_000)
+    context.eval(<<JS)
+      let s;
+      function memory_test() {
+        var a = new Array(s);
+        a.fill(0);
+        while(true) {
+          s *= 1.1;
+          let n = new Array(Math.floor(s));
+          n.fill(0);
+          a = a.concat(n);
+          if (s > 1000000) {
+            return;
+          }
+        }
+      }
+      function set_s(val) {
+        s = val;
+      }
+JS
+    context.call('set_s', 1000)
+    assert_raises(MiniRacer::V8OutOfMemoryError) { context.call('memory_test') }
+    s = context.eval('s')
+    assert_operator(s, :>, 100_000)
+  end
+
   def test_negative_max_memory
-    context = MiniRacer::Context.new(max_memory: -200_000_000)
-    assert_nil(context.instance_variable_get(:@max_memory))
+    assert_raises(ArgumentError) do
+      MiniRacer::Context.new(max_memory: -200_000_000)
+    end
   end
 
   module Echo
@@ -573,6 +604,7 @@ raise FooError, "I like foos"
     assert(isolate.idle_notification(1000))
   end
 
+
   def test_concurrent_access_over_the_same_isolate_1
     isolate = MiniRacer::Isolate.new
     context = MiniRacer::Context.new(isolate: isolate)
@@ -650,7 +682,7 @@ raise FooError, "I like foos"
 
   def test_timeout_in_ruby_land
     context = MiniRacer::Context.new(timeout: 50)
-    context.attach('sleep', proc{ sleep 0.1 })
+    context.attach('sleep', proc{ sleep 0.5 })
     assert_raises(MiniRacer::ScriptTerminatedError) do
       context.eval('sleep(); "hi";')
     end
@@ -729,6 +761,45 @@ raise FooError, "I like foos"
     assert(stats.values.all?{|v| v > 0}, "expecting the isolate to have values for all the vals")
   end
 
+  def test_releasing_memory
+    context = MiniRacer::Context.new
+
+    context.isolate.low_memory_notification
+
+    start_heap = context.heap_stats[:used_heap_size]
+
+    context.eval("'#{"x" * 1_000_000}'")
+
+    context.isolate.low_memory_notification
+
+    end_heap = context.heap_stats[:used_heap_size]
+
+    assert((end_heap - start_heap).abs < 1000, "expecting most of the 1_000_000 long string to be freed")
+  end
+
+  def test_bad_params
+    assert_raises do
+      MiniRacer::Context.new(random: :thing)
+    end
+  end
+
+  def test_ensure_gc
+    context = MiniRacer::Context.new(ensure_gc_after_idle: 1) # 0.01 ms
+    context.isolate.low_memory_notification
+
+    start_heap = context.heap_stats[:used_heap_size]
+
+    context.eval("'#{"x" * 10_000_000}'")
+
+    sleep 0.05
+
+    end_heap = context.heap_stats[:used_heap_size]
+
+    diff = (end_heap - start_heap).abs
+    assert(diff < 1000, "expecting most of the 10_000_000 long string to be " \
+                        "freed, diff is instead #{diff}")
+  end
+
   def test_eval_with_filename
     context = MiniRacer::Context.new()
     context.eval("var foo = function(){baz();}", filename: 'b/c/foo1.js')
@@ -784,7 +855,7 @@ raise FooError, "I like foos"
     isolate = MiniRacer::Isolate.new
     context = MiniRacer::Context.new(isolate: isolate)
     context.dispose
-    MiniRacer::Context.new(isolate: isolate) # Received signal 11 SEGV_MAPERR
+    _context2 = MiniRacer::Context.new(isolate: isolate) # Received signal 11 SEGV_MAPERR
   end
 
   def test_context_starts_with_no_isolate_value
@@ -810,7 +881,6 @@ raise FooError, "I like foos"
   end
 
   def test_heap_dump
-
     f = Tempfile.new("heap")
     path = f.path
     f.unlink
@@ -824,7 +894,91 @@ raise FooError, "I like foos"
     assert dump.length > 0
 
     FileUtils.rm(path)
+  end
 
+  def test_pipe_leak
+    # in Ruby 2.7 pipes will stay open for longer
+    # make sure that we clean up early so pipe file
+    # descriptors are not kept around
+    context = MiniRacer::Context.new(timeout: 1000)
+    10000.times do |i|
+      context.eval("'hello'")
+    end
+  end
+
+  def test_symbol_support
+    context = MiniRacer::Context.new()
+    assert_equal :foo, context.eval("Symbol('foo')")
+  end
+
+  def test_proxy_support
+    js = <<-JS
+      function MyProxy(reference) {
+        return new Proxy(function() {}, {
+          get: function(obj, prop) {
+            return new MyProxy(reference.concat(prop));
+          },
+          apply: function(target, thisArg, argumentsList) {
+            myFunctionLogger(reference);
+          }
+        });
+      };
+      (new MyProxy([])).function_call(new MyProxy([])-1)
+    JS
+    context = MiniRacer::Context.new()
+    context.attach('myFunctionLogger', ->(property) { })
+    context.eval(js)
+  end
+
+  def test_promise
+    context = MiniRacer::Context.new()
+    context.eval <<-JS
+      var x = 0;
+      async function test() {
+        return 99;
+      }
+
+      test().then(v => x = v);
+    JS
+
+    v = context.eval("x");
+    assert_equal(v, 99)
+  end
+
+  def test_webassembly
+    context = MiniRacer::Context.new()
+    context.eval("let instance = null;")
+    filename = File.expand_path("../support/add.wasm", __FILE__)
+    context.attach("loadwasm", proc {|f| File.read(filename).each_byte.to_a})
+    context.attach("print", proc {|f| puts f})
+
+    context.eval <<-JS
+    WebAssembly
+      .instantiate(new Uint8Array(loadwasm()), {
+        wasi_snapshot_preview1: {
+          proc_exit: function() { print("exit"); },
+          args_get: function() { return 0 },
+          args_sizes_get: function() { return 0 }
+        }
+      })
+      .then(i => { instance = i["instance"];})
+      .catch(e => print(e.toString()));
+    JS
+
+    while !context.eval("instance") do
+      context.isolate.pump_message_loop
+    end
+
+    assert_equal(3, context.eval("instance.exports.add(1,2)"))
+  end
+
+  private
+
+  def valgrind?
+    unless defined?(@valgrind)
+      @valgrind = ENV['LD_PRELOAD'] && ENV['LD_PRELOAD'].include?('valgrind')
+    end
+    @valgrind
   end
 end
 end

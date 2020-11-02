@@ -11,3 +11,12 @@ lib/*.so
 /lib/sq_mini_racer/
 /ext/mini_racer_extension/mini_racer.creator.*
 *.bundle
+/mini_racer.config
+/mini_racer.creator
+/mini_racer.creator.user
+/mini_racer.files
+/mini_racer.includes
+/compile_commands.json
+/.vscode/
+/.clangd/
+/.idea/

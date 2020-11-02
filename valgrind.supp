@@ -1,0 +1,74 @@
+{
+   <gc cond>
+   Memcheck:Cond
+   ...
+   fun:gc_*
+   ...
+}
+{
+   <gc_collect cond>
+   Memcheck:Cond
+   ...
+   fun:garbage_collect_*
+   ...
+}
+{
+   <rgeng cond>
+   Memcheck:Cond
+   ...
+   fun:rgengc_*
+   ...
+}
+{
+   <gc value8>
+   Memcheck:Value8
+   ...
+   fun:gc_*
+   ...
+}
+{
+   <rb_gc cond>
+   Memcheck:Cond
+   ...
+   fun:rb_gc_*
+   ...
+}
+{
+   <rb_gc value8>
+   Memcheck:Value8
+   ...
+   fun:rb_gc_*
+   ...
+}
+{
+   <fstr_update_callback cond>
+   Memcheck:Cond
+   fun:fstr_update_callback
+   ...
+}
+{
+   <init_stack>
+   Memcheck:Addr1
+   fun:reserve_stack
+   fun:ruby_init_stack
+   fun:main
+}
+{
+   <unreachable chunk>
+   Memcheck:Cond
+   ...
+   fun:remove_unreachable_chunk
+   ...
+}
+{
+   <fstring_existing_str>
+   Memcheck:Cond
+   fun:fstring_existing_str
+   ...
+}
+{
+   <dsymbol_check>
+   Memcheck:Cond
+   fun:dsymbol_check
+   ...
+}

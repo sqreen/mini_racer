@@ -234,11 +234,16 @@ context = MiniRacer::Context.new(isolate: isolate)
 # give up to 100ms for V8 garbage collection
 isolate.idle_notification(100)
 
+# force V8 to perform a full GC
+isolate.low_memory_notification
+
 ```
 
 This can come in handy to force V8 GC runs for example in between requests if you use MiniRacer on a web application.
 
 Note that this method maps directly to [`v8::Isolate::IdleNotification`](http://bespin.cz/~ondras/html/classv8_1_1Isolate.html#aea16cbb2e351de9a3ae7be2b7cb48297), and that in particular its return value is the same (true if there is no further garbage to collect, false otherwise) and the same caveats apply, in particular that `there is no guarantee that the [call will return] within the time limit.`
+
+Additionally you may automate this process on a context by defining it with `MiniRacer::Content.new(ensure_gc_after_idle: 1000)`. Using this will ensure V8 will run a full GC using `context.isolate.low_memory_notification` 1 second after the last eval on the context. Low memory notification is both slower and more aggressive than an idle_notification and will ensure long living isolates use minimal amounts of memory.
 
 ### V8 Runtime flags
 
@@ -277,7 +282,7 @@ context.eval js
 The same code without the harmony runtime flag results in a `MiniRacer::RuntimeError: RangeError: Maximum call stack size exceeded` exception.
 Please refer to http://node.green/ as a reference on other harmony features.
 
-A list of all V8 runtime flags can be found using `node --v8-options`, or else by perusing [the V8 source code for flags (make sure to use the right version of V8)](https://github.com/v8/v8/blob/master/src/flag-definitions.h).
+A list of all V8 runtime flags can be found using `node --v8-options`, or else by perusing [the V8 source code for flags (make sure to use the right version of V8)](https://github.com/v8/v8/blob/master/src/flags/flag-definitions.h).
 
 Note that runtime flags must be set before any other operation (e.g. creating a context, a snapshot or an isolate), otherwise an exception will be thrown.
 
@@ -313,6 +318,16 @@ context.eval("a = 2")
 
 # nothing works on the context from now on, its a shell waiting to be disposed
 ```
+
+A MiniRacer context can also be dumped in a heapsnapshot file using `#write_heap_snapshot(file_or_io)`
+
+```ruby
+context = MiniRacer::Context.new(timeout: 5)
+context.eval("let a='testing';")
+context.write_heap_snapshot("test.heapsnapshot")
+```
+
+This file can then be loaded in the memory tab of the chrome dev console.
 
 ### Function call
 
@@ -451,7 +466,7 @@ Add this to your .travis.yml file:
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/discourse/mini_racer. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
+Bug reports and pull requests are welcome on GitHub at https://github.com/rubyjs/mini_racer. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [Contributor Covenant](http://contributor-covenant.org) code of conduct.
 
 
 ## License
