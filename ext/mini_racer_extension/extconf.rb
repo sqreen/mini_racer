@@ -30,7 +30,7 @@ def libv8_gem_name
 end
 
 def libv8_version
-  '14.14.0.0.beta1'
+  '14.14.0.0.beta2'
 end
 
 def libv8_basename
