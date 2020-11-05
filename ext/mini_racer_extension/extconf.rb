@@ -37,21 +37,15 @@ def libv8_basename
   "#{libv8_gem_name}-#{libv8_version}-#{ruby_platform}"
 end
 
-def libv8_gemspec_no_libc
-  platform_no_libc = ruby_platform.to_s.split('-')[0..1].join('-')
-  "#{libv8_gem_name}-#{libv8_version}-#{platform_no_libc}.gemspec"
-end
-
 def libv8_gemspec
   "#{libv8_basename}.gemspec"
 end
 
 def libv8_local_path(path=Gem.path)
-  gemspecs = [libv8_gemspec, libv8_gemspec_no_libc].uniq
+  gemspecs = [libv8_gemspec].uniq
+
   puts "looking for #{gemspecs.join(', ')} in installed gems"
-  candidates = path.product(gemspecs)
-    .map { |(p, gemspec)| File.join(p, 'specifications', gemspec) }
-  p candidates
+  candidates = path.product(gemspecs).map { |(p, gemspec)| File.join(p, 'specifications', gemspec) }
   found = candidates.select { |f| File.exist?(f) }.first
 
   unless found
@@ -98,6 +92,7 @@ end
 
 def parse_platform(str)
   Gem::Platform.new(str).tap do |p|
+    p.instance_eval { @version = 'musl' } if str =~ /-musl/ && p.version.nil?
     p.instance_eval { @cpu = 'x86_64' } if str =~ /universal.*darwin/
   end
 end
