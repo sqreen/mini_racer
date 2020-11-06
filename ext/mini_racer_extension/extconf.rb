@@ -72,14 +72,7 @@ def fixup_libtinfo
 end
 
 def libv8_gem_name
-  return "libv8-solaris" if IS_SOLARIS
-
-  is_musl = false
-  begin
-    is_musl = !!(File.read('/proc/self/maps') =~ /ld-musl-x86_64/)
-  rescue; end
-
-  is_musl ? 'libv8-alpine' : 'libv8'
+  'libv8-node'
 end
 
 # 1) old rubygem versions prefer source gems to binary ones
@@ -121,8 +114,8 @@ EOS
   "#{ruby} '#{file.path}'"
 end
 
-LIBV8_VERSION = '6.7.288.46.1'
-libv8_rb = Dir.glob('**/libv8.rb').first
+LIBV8_VERSION = '10.22.1.0.beta2'
+libv8_rb = Dir.glob('**/libv8-node.rb').first
 FileUtils.mkdir_p('gemdir')
 unless libv8_rb
   gem_name = libv8_gem_name
@@ -132,17 +125,17 @@ unless libv8_rb
   unless $?.success?
     warn <<EOS
 
-WARNING: Could not download a private copy of the libv8 gem. Please make
+WARNING: Could not download a private copy of the libv8-node gem. Please make
 sure that you have internet access and that the `gem` binary is available.
 
 EOS
   end
 
-  libv8_rb = Dir.glob('**/libv8.rb').first
+  libv8_rb = Dir.glob('**/libv8-node.rb').first
   unless libv8_rb
     warn <<EOS
 
-WARNING: Could not find libv8 after the local copy of libv8 having supposedly
+WARNING: Could not find libv8-node after the local copy of libv8-node having supposedly
 been installed.
 
 EOS
@@ -154,6 +147,6 @@ if libv8_rb
   $:.unshift File.dirname(libv8_rb)
 end
 
-require 'libv8'
-Libv8.configure_makefile
+require 'libv8-node'
+Libv8::Node.configure_makefile
 create_makefile 'sq_mini_racer_extension'
