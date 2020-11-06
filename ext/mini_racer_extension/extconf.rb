@@ -26,14 +26,14 @@ def cppflags_add_cpu_extension!
 end
 
 def libv8_gem_name
-  return "libv8-solaris" if IS_SOLARIS
-  return "libv8-alpine" if IS_LINUX_MUSL
+  #return "libv8-solaris" if IS_SOLARIS
+  #return "libv8-alpine" if IS_LINUX_MUSL
 
-  'libv8'
+  'libv8-node'
 end
 
 def libv8_version
-  '7.3.492.27.1'
+  '12.18.4.0.beta2'
 end
 
 def libv8_basename
@@ -82,7 +82,7 @@ def libv8_vendor_path
   end
 
   puts "looking for #{libv8_basename}/lib/libv8.rb in #{vendor_path}"
-  unless Dir.glob(File.join(vendor_path, libv8_basename, 'lib', 'libv8.rb')).first
+  unless Dir.glob(File.join(vendor_path, libv8_basename, 'lib', 'libv8-node.rb')).first
     puts "#{libv8_basename}/lib/libv8.rb not found in #{vendor_path}"
     return
   end
@@ -189,7 +189,7 @@ end
 
 ensure_libv8_load_path
 
-require 'libv8'
+require 'libv8-node'
 
 IS_DARWIN = RUBY_PLATFORM =~ /darwin/
 
@@ -246,7 +246,7 @@ if enable_config('debug') || enable_config('asan')
   CONFIG['debugflags'] << ' -ggdb3 -O0'
 end
 
-Libv8.configure_makefile
+Libv8::Node.configure_makefile
 
 if enable_config('asan')
   $CPPFLAGS.insert(0, " -fsanitize=address ")
