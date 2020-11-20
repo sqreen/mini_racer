@@ -29,43 +29,47 @@ def libv8_gem_name
   'libv8-node'
 end
 
-def libv8_version
-  '14.14.0.0.beta2'
+def libv8_requirement
+  '~> 14.14.0.0.beta1'
 end
 
-def libv8_basename
-  "#{libv8_gem_name}-#{libv8_version}-#{ruby_platform}"
+def libv8_basename(version)
+  "#{libv8_gem_name}-#{version}-#{ruby_platform}"
 end
 
-def libv8_gemspec
-  "#{libv8_basename}.gemspec"
+def libv8_gemspec(version)
+  "#{libv8_basename(version)}.gemspec"
 end
 
 def libv8_local_path(path=Gem.path)
-  gemspecs = [libv8_gemspec].uniq
+  name_glob = "#{libv8_gem_name}-*-#{ruby_platform}"
 
-  puts "looking for #{gemspecs.join(', ')} in installed gems"
-  candidates = path.product(gemspecs).map { |(p, gemspec)| File.join(p, 'specifications', gemspec) }
-  found = candidates.select { |f| File.exist?(f) }.first
+  puts "looking for #{name_glob} in #{path.inspect}"
 
-  unless found
-    puts "#{gemspecs.join(', ')} not found in installed gems"
+  paths = path.map { |p| Dir.glob(File.join(p, 'specifications', name_glob + '.gemspec')) }.flatten
+
+  if paths.empty?
+    puts "#{name_glob} not found in #{path.inspect}"
     return
   end
 
-  puts "found in installed specs: #{found}"
+  specs = paths.map { |p| [p, eval(File.read(p))] }
+               .select { |_, spec| Gem::Requirement.new(libv8_requirement).satisfied_by?(spec.version) }
+  found_path, found_spec = specs.sort_by { |_, spec| spec.version }.last
 
-  gemdir = File.basename(found, '.gemspec')
-  dir = File.expand_path(File.join(found, '..', '..', 'gems', gemdir))
+  puts "found in specs: #{found_path}"
+
+  gemdir = File.basename(found_path, '.gemspec')
+  dir = File.expand_path(File.join(found_path, '..', '..', 'gems', gemdir))
 
   unless Dir.exist?(dir)
-    puts "not found in installed gems: #{dir}"
+    puts "not found in gems: #{dir}"
     return
   end
 
-  puts "found in installed gems: #{dir}"
+  puts "found in gems: #{dir}"
 
-  dir
+  [dir, found_spec]
 end
 
 def vendor_path
@@ -73,21 +77,7 @@ def vendor_path
 end
 
 def libv8_vendor_path
-  puts "looking for #{libv8_basename} in #{vendor_path}"
-  path = Dir.glob("#{vendor_path}/#{libv8_basename}").first
-
-  unless path
-    puts "#{libv8_basename} not found in #{vendor_path}"
-    return
-  end
-
-  puts "looking for #{libv8_basename}/lib/libv8-node.rb in #{vendor_path}"
-  unless Dir.glob(File.join(vendor_path, libv8_basename, 'lib', 'libv8-node.rb')).first
-    puts "#{libv8_basename}/lib/libv8.rb not found in #{vendor_path}"
-    return
-  end
-
-  path
+  libv8_local_path([vendor_path])
 end
 
 def parse_platform(str)
@@ -116,21 +106,23 @@ def libv8_remote_search
   json = JSON.parse(body)
 
   versions = json.select do |v|
-    Gem::Version.new(v['number']) == Gem::Version.new(libv8_version)
+    Gem::Requirement.new(libv8_requirement).satisfied_by?(Gem::Version.new(v['number']))
   end
   abort(<<-ERROR) if versions.empty?
-  ERROR: could not find #{libv8_gem_name} (version #{libv8_version}) in rubygems.org
+  ERROR: could not find #{libv8_gem_name} (requirement #{libv8_requirement}) in rubygems.org
   ERROR
 
   platform_versions = versions.select do |v|
     parse_platform(v['platform']) == ruby_platform unless v['platform'] =~ /universal.*darwin/
   end
   abort(<<-ERROR) if platform_versions.empty?
-  ERROR: found #{libv8_gem_name}-#{libv8_version}, but no binary for #{ruby_platform}
-         try "gem install #{libv8_gem_name} -v '#{libv8_version}'" to attempt to build libv8 from source
+  ERROR: found gems matching #{libv8_gem_name}:'#{libv8_requirement}', but no binary for #{ruby_platform}
+         try "gem install #{libv8_gem_name}:'#{libv8_requirement}'" to attempt to build #{libv8_gem_name} from source
   ERROR
 
-  platform_versions.first
+  puts "found #{libv8_gem_name} for #{ruby_platform} on rubygems: #{platform_versions.map { |v| v['number'] }.join(', ')}"
+
+  platform_versions.sort_by { |v| Gem::Version.new(v['number']) }.last
 end
 
 def libv8_download_uri(name, version, platform)
@@ -142,19 +134,19 @@ def libv8_downloaded_gem(name, version, platform)
 end
 
 def libv8_download(name, version, platform)
-  FileUtils.mkdir_p(vendor_path)
+  FileUtils.mkdir_p(File.join(vendor_path, 'cache'))
   body = http_get(libv8_download_uri(name, version, platform))
-  File.open(File.join(vendor_path, libv8_downloaded_gem(name, version, platform)), 'wb') { |f| f.write(body) }
+  File.open(File.join(vendor_path, 'cache', libv8_downloaded_gem(name, version, platform)), 'wb') { |f| f.write(body) }
 end
 
 def libv8_install!
-  cmd = "gem install #{libv8_gem_name} --version '#{libv8_version}' --install-dir '#{vendor_path}'"
+  cmd = "gem install #{libv8_gem_name} --version '#{libv8_requirement}' --install-dir '#{vendor_path}'"
   puts "installing #{libv8_gem_name} using `#{cmd}`"
   rc = system(cmd)
 
   abort(<<-ERROR) unless rc
-  ERROR: could not install #{libv8_gem_name} #{libv8_version}
-          try "gem install #{libv8_gem_name} -v '#{libv8_version}'" to attempt to build libv8 from source
+  ERROR: could not install #{libv8_gem_name}:#{libv8_requirement}
+          try "gem install #{libv8_gem_name} -v '#{libv8_requirement}'" to attempt to build libv8 from source
   ERROR
 
   libv8_local_path([vendor_path])
@@ -168,18 +160,20 @@ def libv8_vendor!
   puts "downloading #{libv8_downloaded_gem(libv8_gem_name, version['number'], version['platform'])} to #{vendor_path}"
   libv8_download(libv8_gem_name, version['number'], version['platform'])
 
-  package = Gem::Package.new(File.join(vendor_path, libv8_downloaded_gem(libv8_gem_name, version['number'], version['platform'])))
-  package.extract_files(File.join(vendor_path, File.basename(libv8_downloaded_gem(libv8_gem_name, version['number'], version['platform']), '.gem')))
+  package = Gem::Package.new(File.join(vendor_path, 'cache', libv8_downloaded_gem(libv8_gem_name, version['number'], version['platform'])))
+  package.extract_files(File.join(vendor_path, 'gems', File.basename(libv8_downloaded_gem(libv8_gem_name, version['number'], version['platform']), '.gem')))
+  FileUtils.mkdir_p(File.join(vendor_path, 'specifications'))
+  File.open(File.join(vendor_path, 'specifications', File.basename(libv8_downloaded_gem(libv8_gem_name, version['number'], version['platform']), '.gem') + '.gemspec'), 'wb') { |f| f.write(package.spec.to_ruby) }
 
   libv8_vendor_path
 end
 
 def ensure_libv8_load_path
-  puts "detected platform #{RUBY_PLATFORM} => #{ruby_platform}"
+  puts "platform ruby:#{RUBY_PLATFORM} rubygems:#{Gem::Platform.new(RUBY_PLATFORM)} detected:#{ruby_platform}"
 
-  libv8_path = libv8_local_path
-  unless ENV['ONLY_INSTALLED_LIBV8_GEM']
-    libv8_path ||= libv8_vendor_path || libv8_vendor!
+  libv8_path, spec = libv8_local_path
+  if !ENV['ONLY_INSTALLED_LIBV8_GEM'] && !libv8_path
+    libv8_path, spec = libv8_vendor_path || libv8_vendor!
   end
 
   abort(<<-ERROR) unless libv8_path
