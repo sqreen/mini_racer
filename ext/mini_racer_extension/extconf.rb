@@ -60,6 +60,11 @@ def libv8_local_path(path=Gem.path)
                .select { |_, spec| Gem::Requirement.new(libv8_requirement).satisfied_by?(spec.version) }
   found_path, found_spec = specs.sort_by { |_, spec| spec.version }.last
 
+  unless found_path && found_spec
+    puts "not found in specs: no '#{libv8_requirement}' in #{paths.inspect}"
+    return
+  end
+
   puts "found in specs: #{found_path}"
 
   gemdir = File.basename(found_path, '.gemspec')
