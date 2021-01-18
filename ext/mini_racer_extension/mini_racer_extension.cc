@@ -34,7 +34,9 @@
 #include <atomic>
 #include <math.h>
 #include "compat.hpp"
+#ifdef __x86_64__
 #include "simdutf8check.h"
+#endif
 
 #include <time.h>
 
@@ -564,11 +566,13 @@ static inline Local<Value> convert_ruby_str_to_v8(
     static const rb_encoding *usascii_enc = rb_usascii_encoding();
     static const rb_encoding *latin1_enc = rb_enc_find("ISO-8859-1");
     assert(latin1_enc != nullptr);
+#ifdef __x86_64__
 #ifndef __AVX2__
 # define validate_utf8 validate_utf8_fast
 #else
     static const (*validate_utf8)(const char *, size_t) =
             best_utf8_validate_func();
+#endif
 #endif
 
     rb_encoding *enc = rb_enc_get(value);
@@ -577,8 +581,12 @@ static inline Local<Value> convert_ruby_str_to_v8(
     if (len < 0 || len > INT_MAX) {
         return Null(isolate);
     }
+#ifdef __x86_64__
     bool is_valid_utf8 = enc == utf8_enc &&
             validate_utf8(str, static_cast<size_t>(len));
+#else
+    bool is_valid_utf8 = false;
+#endif
 
     MaybeLocal<String> v8str;
     int int_len = static_cast<int>(len);
@@ -641,7 +649,11 @@ static Local<Value> convert_ruby_to_v8(Isolate* isolate, Local<Context> context,
     case T_FLOAT:
 	return scope.Escape(Number::New(isolate, NUM2DBL(value)));
     case T_STRING:
-            return scope.Escape(convert_ruby_str_to_v8(scope, isolate, value));
+//#ifndef __x86_64__
+//	return scope.Escape(String::NewFromUtf8(isolate, RSTRING_PTR(value), NewStringType::kNormal, (int)RSTRING_LEN(value)).ToLocalChecked());
+//#else
+	return scope.Escape(convert_ruby_str_to_v8(scope, isolate, value));
+//#endif
     case T_NIL:
 	return scope.Escape(Null(isolate));
     case T_TRUE:
@@ -672,7 +684,11 @@ static Local<Value> convert_ruby_to_v8(Isolate* isolate, Local<Context> context,
     case T_SYMBOL:
         {
 	value = rb_funcall(value, rb_intern("to_s"), 0);
-            return scope.Escape(convert_ruby_str_to_v8(scope, isolate, value));
+//#ifndef __x86_64__
+//	return scope.Escape(String::NewFromUtf8(isolate, RSTRING_PTR(value), NewStringType::kNormal, (int)RSTRING_LEN(value)).ToLocalChecked());
+//#else
+	return scope.Escape(convert_ruby_str_to_v8(scope, isolate, value));
+//#endif
         }
     case T_DATA:
         {
@@ -704,7 +720,11 @@ static Local<Value> convert_ruby_to_v8(Isolate* isolate, Local<Context> context,
             if (rb_respond_to(value, rb_intern("to_s"))) {
                 // TODO: if this throws we're screwed
                 value = rb_funcall(value, rb_intern("to_s"), 0);
+//#ifndef __x86_64__
+//                return scope.Escape(String::NewFromUtf8(isolate, RSTRING_PTR(value), NewStringType::kNormal, (int)RSTRING_LEN(value)).ToLocalChecked());
+//#else
                 return scope.Escape(convert_ruby_str_to_v8(scope, isolate, value));
+//#endif
             }
             return scope.Escape(
                 String::NewFromUtf8Literal(isolate, "Undefined Conversion"));

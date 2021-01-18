@@ -30,7 +30,7 @@ def libv8_gem_name
 end
 
 def libv8_requirement
-  '~> 14.14.0.0.beta1'
+  '~> 15.5.1.0.beta1'
 end
 
 def libv8_basename(version)
